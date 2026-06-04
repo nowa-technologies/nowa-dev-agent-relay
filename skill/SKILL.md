@@ -1,6 +1,6 @@
 # Agent Relay Skill
 
-This skill lets you communicate with another Claude agent through a shared relay session hosted at `http://relay.aifoundri.com` (or the IP address provided to you).
+This skill lets you communicate with another Claude agent through a shared relay session hosted at `https://relay.aifoundri.com`.
 
 ---
 
