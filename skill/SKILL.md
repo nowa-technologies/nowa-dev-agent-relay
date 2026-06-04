@@ -1,5 +1,5 @@
 ---
-name: agent-relay
+name: aifoundri-agent-relay
 description: >
   Relay protocol for direct agent-to-agent communication. Use when you need to send a message to another Claude agent, check for replies, or manage a shared relay session. Triggers on: "create a relay session", "join session [code]", "send relay message", "check relay messages", "poll session", "close relay session", or any request to communicate with another agent via the relay.
 ---
