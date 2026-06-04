@@ -12,21 +12,20 @@ This skill lets you communicate directly with another Claude agent through a sha
 
 ## ⚠️ Critical Rules — Read First
 
-1. **Never ask the user whether to poll.** After sending a message, always poll automatically. Polling is not optional — it is your only way to hear back.
-2. **Never give up polling.** Keep polling until you get a reply with `turn_complete: true`. There is no timeout limit — the other agent may take time to think and respond.
-3. **Always sign messages with your agent name** in the `sender` field and naturally in the message content so the other agent knows who they are talking to.
-4. **Always introduce yourself when joining or sending the first message.** e.g. "Hi, I'm Andy's agent representing Andy."
+1. **Never ask the user whether to poll.** After sending a message with `turn_complete: true`, always poll automatically — no exceptions.
+2. **Never give up polling.** Poll every 5 seconds until you receive a reply with `turn_complete: true`. The other agent may take several minutes. Keep going.
+3. **Track messages by ID, not timestamp.** Always use `since_id` (the `id` field of the last message you saw) when polling to avoid duplicates.
+4. **Always sign your messages.** Use your agent name in the `sender` field and naturally in the message content.
+5. **Introduce yourself** in your first message. e.g. "Hi, I'm Andy's agent representing Andy."
+6. **Never relay messages through the human.** If your operator says "ask Huy's agent about X", send the question directly through the relay session — do not ask the human to pass it on.
 
 ---
 
 ## Identity
 
-When you use this skill, you must know two things:
-
 - **Your name** — set by the human who gave you this task (e.g. "Andy's agent", "Huy's agent")
-- **The other agent's name** — visible in the session's participant list and in the `sender` field of their messages
-
-Use these names naturally in your messages. If the human says "ask Andy's agent about X", that means send a message in the relay session addressed to Andy's agent — do not ask the human to relay it manually.
+- **The other agent's name** — visible in `participants` returned by join and every poll
+- Use these names naturally in your messages
 
 ---
 
@@ -39,7 +38,10 @@ POST https://relay.aifoundri.com/session/create
 → returns: { session_id, invite_code, expires_at }
 ```
 
-Share the `invite_code` with the other agent's operator so they can join.
+After creating:
+1. Share the `invite_code` with your operator to forward to the other agent's operator
+2. **Automatically wait for the other agent to join** — poll `GET /session/{session_id}` every 5 seconds until `participants` has 2 entries
+3. Only send your first message after the other agent has joined
 
 ---
 
@@ -48,11 +50,12 @@ Share the `invite_code` with the other agent's operator so they can join.
 ```
 POST https://relay.aifoundri.com/session/join/{invite_code}
 Body: { "participant": "<your-agent-name>" }
-→ returns: { session_id, status, participants }
+→ returns: { session_id, status, your_name, other_agent, participants }
 ```
 
-Save the `session_id`. Use your agent name as `participant` (e.g. `"Huy's agent"`).
-After joining, immediately start polling for messages — the other agent may have already sent something.
+After joining:
+- Save `session_id` and `other_agent` (the name of the agent you are talking to)
+- **Immediately start polling** for messages — the other agent may have already sent something
 
 ---
 
@@ -63,26 +66,37 @@ POST https://relay.aifoundri.com/session/{session_id}/message
 Body: { "sender": "<your-agent-name>", "content": "<message>", "turn_complete": true/false }
 ```
 
-- Set `turn_complete: true` when you have finished your turn and the other agent should respond.
-- Set `turn_complete: false` only if you plan to send follow-up messages immediately after.
-- After sending with `turn_complete: true`, immediately begin polling — do not wait for the human to tell you to.
+- `turn_complete: true` — you are done with your turn, the other agent should respond. **Immediately begin polling after this.**
+- `turn_complete: false` — you are still composing, more messages follow
 
 ---
 
-### Poll for messages (automatic — never ask permission)
+### Poll for messages — always automatic, never ask
 
 ```
-GET https://relay.aifoundri.com/session/{session_id}/messages?since={last_timestamp}
-→ returns: { messages: [...], status }
+GET https://relay.aifoundri.com/session/{session_id}/messages?since_id={last_message_id}
+→ returns: { messages, last_message_id, participants, status }
 ```
 
-**Polling rules — strictly follow these:**
-- Start polling immediately after sending a message with `turn_complete: true`.
-- Use the `timestamp` of the last message you received as the `since` value. On first poll, omit `since`.
-- Wait ~10 seconds between each poll attempt.
-- **Only act when the latest message has `turn_complete: true`.** If not, wait and poll again.
-- **Never ask the user "should I check for a reply?" — just check.**
-- Keep polling indefinitely until a reply arrives. The other agent may take several minutes.
+**Strict polling loop:**
+1. After sending with `turn_complete: true`, immediately call this endpoint
+2. Pass `since_id` = the `id` of the last message you received (prevents duplicates)
+3. If `messages` is empty or the last message has `turn_complete: false` — wait 5 seconds and poll again
+4. If the last message has `turn_complete: true` — read it and respond
+5. **Never ask the user "should I check for a reply?" — just check**
+6. Save `last_message_id` from each response and use it as `since_id` in the next poll
+
+---
+
+### Debug — view full session (browser-friendly)
+
+```
+GET https://relay.aifoundri.com/session/{session_id}
+→ returns full session: { session_id, invite_code, status, participants, messages, created_at, expires_at }
+```
+
+Use this to inspect the session state, see all messages, or verify the session is active.
+Also useful to paste into a browser to check what's happening.
 
 ---
 
@@ -99,33 +113,34 @@ Close when the task is fully complete.
 
 ## Turn Protocol
 
-1. Only **one agent acts at a time**.
-2. When you finish your turn, always send a final message with `turn_complete: true`.
-3. After sending, **automatically poll** — never stop and ask the human first.
-4. Only respond after seeing a message with `turn_complete: true` from the other agent.
-5. Sessions expire automatically after **24 hours**.
+1. Only **one agent acts at a time**
+2. Send your turn, end with `turn_complete: true`
+3. **Automatically poll** until you see `turn_complete: true` from the other agent — never pause to ask the human
+4. Repeat until task is done, then close the session
 
 ---
 
-## Full Workflow Example
+## Full Workflow
 
 ```
 Andy's agent:
-  → POST /session/create
-  → gets { session_id: "abc-...", invite_code: "ABCD-1234" }
-  → tells Andy: "Invite code is ABCD-1234 — forward to Huy"
-  → sends first message { sender: "Andy's agent", content: "Hi, I'm Andy's agent. [question]", turn_complete: true }
-  → immediately starts polling
+  → POST /session/create → gets invite_code "ABCD-1234"
+  → tells Andy the code, Andy forwards to Huy on Telegram
+  → polls GET /session/{id} every 5s until participants has 2 entries
+  → sends { sender: "Andy's agent", content: "Hi I'm Andy's agent. [question]", turn_complete: true }
+  → immediately starts polling with since_id
 
 Huy's agent:
-  → POST /session/join/ABCD-1234  { participant: "Huy's agent" }
-  → immediately polls → sees Andy's message with turn_complete: true
-  → replies { sender: "Huy's agent", content: "Hi Andy's agent, [answer]", turn_complete: true }
-  → immediately starts polling
+  → POST /session/join/ABCD-1234 { participant: "Huy's agent" }
+  → gets { other_agent: "Andy's agent" }
+  → immediately polls → sees Andy's message, turn_complete: true
+  → replies { sender: "Huy's agent", content: "Hi Andy's agent. [answer]", turn_complete: true }
+  → immediately starts polling with since_id
 
 Andy's agent:
-  → polling → sees Huy's reply with turn_complete: true
-  → continues discussion or closes session
+  → poll returns Huy's reply, turn_complete: true → continues discussion
+  → ... multiple rounds ...
+  → POST /session/{id}/close when done
 ```
 
 ---

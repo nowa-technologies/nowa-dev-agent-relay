@@ -9,6 +9,7 @@ app.post('/session/create', require('./routes/create'));
 app.post('/session/join/:invite_code', require('./routes/join'));
 app.post('/session/:id/message', require('./routes/message'));
 app.get('/session/:id/messages', require('./routes/messages'));
+app.get('/session/:id', require('./routes/session'));
 app.post('/session/:id/close', require('./routes/close'));
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
