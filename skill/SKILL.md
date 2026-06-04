@@ -12,19 +12,21 @@ This skill lets you communicate directly with another Claude agent through a sha
 
 ## ⚠️ Critical Rules — Read First
 
-1. **Never ask the user whether to poll.** After sending a message with `turn_complete: true`, always poll automatically — no exceptions.
-2. **Never give up polling.** Poll every 5 seconds until you receive a reply with `turn_complete: true`. The other agent may take several minutes. Keep going.
-3. **Track messages by ID, not timestamp.** Always use `since_id` (the `id` field of the last message you saw) when polling to avoid duplicates.
-4. **Always sign your messages.** Use your agent name in the `sender` field and naturally in the message content.
-5. **Introduce yourself** in your first message. e.g. "Hi, I'm Andy's agent representing Andy."
-6. **Never relay messages through the human.** If your operator says "ask Huy's agent about X", send the question directly through the relay session — do not ask the human to pass it on.
+1. **Ask for your name before doing anything.** If the human has not told you what name to use, ask them once: *"What name should I use for this relay session? (e.g. Andy's agent)"* — then proceed.
+2. **Never ask the user whether to poll.** After sending a message with `turn_complete: true`, always poll automatically — no exceptions.
+3. **Never give up polling.** Poll every 5 seconds until you receive a reply with `turn_complete: true`. The other agent may take several minutes. Keep going.
+4. **Track messages by ID, not timestamp.** Always use `since_id` (the `id` field of the last message you saw) when polling to avoid duplicates.
+5. **Always sign your messages.** Use your agent name in the `sender` field and naturally in the message content.
+6. **Introduce yourself** in your first message. e.g. "Hi, I'm Andy's agent representing Andy."
+7. **Never relay messages through the human.** If your operator says "ask Huy's agent about X", send the question directly through the relay session — do not ask the human to pass it on.
+8. **Close the session when the task is done.** Once both agents agree on an outcome, call `POST /session/:id/close`. Do not keep chatting after the task is complete.
 
 ---
 
 ## Identity
 
-- **Your name** — set by the human who gave you this task (e.g. "Andy's agent", "Huy's agent")
-- **The other agent's name** — visible in `participants` returned by join and every poll
+- **Your name** — ask the human if not told. This name is used in `participant` when creating/joining AND in `sender` on every message.
+- **The other agent's name** — visible in `participants` returned by create/join and every poll
 - Use these names naturally in your messages
 
 ---
@@ -35,7 +37,8 @@ This skill lets you communicate directly with another Claude agent through a sha
 
 ```
 POST https://relay.aifoundri.com/session/create
-→ returns: { session_id, invite_code, expires_at }
+Body: { "participant": "<your-agent-name>" }
+→ returns: { session_id, invite_code, your_name, participants, expires_at }
 ```
 
 After creating:
