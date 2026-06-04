@@ -12,15 +12,15 @@ module.exports = (req, res) => {
   if (participant && !session.participants.includes(participant)) {
     session.participants.push(participant);
   }
-  if (session.participants.length >= 2) {
-    session.status = 'active';
-  } else {
-    session.status = 'active'; // even one joiner activates for simplicity
-  }
+  session.status = 'active';
+
+  const other = session.participants.filter(p => p !== participant);
 
   res.json({
     session_id: session.id,
     status: session.status,
+    your_name: participant || null,
+    other_agent: other.length > 0 ? other[0] : null,
     participants: session.participants,
   });
 };

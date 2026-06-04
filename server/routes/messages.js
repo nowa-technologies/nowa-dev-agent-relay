@@ -11,6 +11,7 @@ module.exports = (req, res) => {
   res.json({
     session_id: id,
     status: session.status,
+    participants: session.participants,
     messages,
   });
 };
